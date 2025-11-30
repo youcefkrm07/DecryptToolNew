@@ -653,7 +653,83 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void decryptCloneSettingsFromApk(String ap,String pn){appendLog("Starting Clone Settings Decrypt. Pkg: "+pn);if(pn==null||pn.isEmpty()){appendLog("❌ Err: Pkg name missing.");handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_no_pkg.json");return;}if(ap==null){appendLog("❌ Err: APK Path NULL.");handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_no_apk.json");return;}StringBuilder sb=new StringBuilder();int x=0,fc=0;String em=null;Map<String,ZipEntry>ch=new HashMap<>();try(ZipFile zf=new ZipFile(ap)){appendLog("Searching MD5 resources (idx 0,1...):");while(true){String fm=CryptoUtils.generateSettingsFilename(pn,x);appendLog("  -> Look part "+x+": "+fm);ZipEntry en=findApkEntryByName(zf,ch,fm,true);if(en!=null){String fN=en.getName();appendLog("      [+] Found: "+fN+" (Size: "+en.getSize()+")");byte[]cb=readZipEntryContent(zf,en);if(cb!=null){String c=new String(cb,StandardCharsets.UTF_8).trim();if(!c.isEmpty()){sb.append(c);fc++;}else appendLog("      [!] Part "+x+" empty.");}else{appendLog("      [!] Err reading "+fN+". Stopping.");em="Err reading: "+fN;break;}}else{if(x==0){appendLog("      [-] Part 0 ("+fm+") not found. Cannot proceed.");em="Initial part (idx 0, "+fm+") not found.";}else appendLog("      [-] Part "+x+" ("+fm+") not found. End sequence.");break;}x++;if(x>100){appendLog("      [!] Max part (100) reached.");em="Max parts limit.";break;}}if(fc==0){String fe=(em!=null)?em:"No valid settings parts.";appendLog("❌ "+fe);handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_no_parts.json");return;}appendLog("[*] Assembled "+fc+" part(s). Base64 len: "+sb.length());appendLog("[*] Deriving key for: "+pn);byte[]dk=CryptoUtils.deriveDynamicSettingsKey(pn);appendLog("[*] Derived key (Hex): "+CryptoUtils.bytesToHex(dk));appendLog("[*] Decoding B64 & AES decrypt (PKCS7)...");String dj=CryptoUtils.decryptAesEcbPkcs7Base64(sb.toString(),dk);handleDecryptionResultString(dj,MainActivity.DataMode.CLONE_SETTINGS,pn,"cloneSettings_dec.json");if(dj!=null){String tj=dj.trim();if((tj.startsWith("{")&&tj.endsWith("}"))||(tj.startsWith("[")&&tj.endsWith("]")))appendLog("   Result JSON like.");else appendLog("   ⚠️ Warn: Result NOT JSON like.");}}catch(Exception e){em=(em!=null?em+" | ":"")+"Ex settings decrypt: "+e.getMessage();Log.e(TAG,em,e);appendLog("❌ "+em);handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_unknown.json");}}
-    private void decryptChainedPropertiesFromApk(String ap,String pn,Long ts){appendLog("Starting Chained Props Decrypt. Pkg: "+pn+", TS: "+ts);if(pn==null||pn.isEmpty()||ts==null){appendLog("❌ Err: Pkg/TS missing.");handleDecryptionResultString(null,MainActivity.DataMode.CHAINED_PROPERTIES,pn,"err_input.props");return;}if(ap==null){appendLog("❌ Err: APK Path NULL.");handleDecryptionResultString(null,MainActivity.DataMode.CHAINED_PROPERTIES,pn,"err_no_apk.props");return;}Map<String,String>p=new LinkedHashMap<>();int fc=0;String m=null;Map<String,ZipEntry>ch=new HashMap<>();try(ZipFile zf=new ZipFile(ap)){String ik=MainActivity.CryptoConstants.CHAINED_KEY_PREFIX+pn+ts;String ck=CryptoUtils.generateMd5Hex(ik);appendLog("Initial Key MD5: "+ck);for(int x=0;x<MainActivity.CryptoConstants.CHAINED_MAX_DEPTH;x++){appendLog("\n--- Chain Step "+(x+1)+" ---");String rn=CryptoUtils.generateChainedPropertiesFilename(ck);appendLog("  -> Look file: "+rn+" (key MD5: "+ck+")");ZipEntry en=findApkEntryByName(zf,ch,rn,true);if(en!=null){String fN=en.getName();appendLog("      [+] Found: "+fN+" (Size: "+en.getSize()+")");fc++;byte[]eB=readZipEntryContent(zf,en);if(eB==null||eB.length==0){m="      [!] Entry '"+fN+"' empty/unreadable. Stop.";appendLog(m);break;}byte[]sk=CryptoUtils.getChainedSimpleCryptKeyBytes(ck);appendLog("      [*] Decrypt "+fN+" key MD5: "+ck);Log.d(TAG,"Chained Decrypt Key(HEX '"+ck+"'): "+CryptoUtils.bytesToHex(sk));byte[]dB=CryptoUtils.decryptAesEcbPkcs7(eB,sk);if(dB!=null){appendLog("      [*] Decrypted "+dB.length+" bytes. Parsing...");Map<String,String>cp=PropertiesParser.parseProperties(dB);if(!cp.isEmpty()){appendLog("      [*] Parsed "+cp.size()+" props.");p.putAll(cp);}else appendLog("      [*] Parsed 0 props.");}else{m="      [!] Decrypt fail (Key MD5: "+ck+"). Stop.";appendLog(m);break;}ck=rn;appendLog("      [*] Next key MD5 source: "+ck);}else{if(x==0)m="      [-] Initial file ("+rn+") not found.";else m="      [-] File "+rn+" not found. End chain.";appendLog(m);break;}}if(p.isEmpty()){if(m==null)m="No props decrypted.";if(fc==0&&!m.contains("Initial file"))m+=" (No files found).";appendLog("❌ "+m);handleDecryptionResultString(null,MainActivity.DataMode.CHAINED_PROPERTIES,pn,"err_no_props.props");return;}else if(m!=null&&!m.contains("End chain"))appendLog("⚠️ Chain stopped: "+m);appendLog("\n[*] Formatting "+p.size()+" props from "+fc+" file(s)...");String fp=PropertiesParser.formatProperties(p);handleDecryptionResultString(fp,MainActivity.DataMode.CHAINED_PROPERTIES,pn,"strings_dec.properties");}catch(Exception e){m=(m!=null?em+" | ":"")+"Ex chained decrypt: "+e.getMessage();Log.e(TAG,m,e);appendLog("❌ "+m);handleDecryptionResultString(null,MainActivity.DataMode.CHAINED_PROPERTIES,pn,"err_unknown.props");}}
+    private void decryptChainedPropertiesFromApk(String ap, String pn, Long ts) {
+        appendLog("Starting Chained Props Decrypt. Pkg: " + pn + ", TS: " + ts);
+        if (pn == null || pn.isEmpty() || ts == null) {
+            appendLog("❌ Err: Pkg/TS missing.");
+            handleDecryptionResultString(null, MainActivity.DataMode.CHAINED_PROPERTIES, pn, "err_input.props");
+            return;
+        }
+        if (ap == null) {
+            appendLog("❌ Err: APK Path NULL.");
+            handleDecryptionResultString(null, MainActivity.DataMode.CHAINED_PROPERTIES, pn, "err_no_apk.props");
+            return;
+        }
+        Map<String, String> p = new LinkedHashMap<>();
+        int fc = 0;
+        String m = null;
+        Map<String, ZipEntry> ch = new HashMap<>();
+        try (ZipFile zf = new ZipFile(ap)) {
+            String ik = MainActivity.CryptoConstants.CHAINED_KEY_PREFIX + pn + ts;
+            String ck = CryptoUtils.generateMd5Hex(ik);
+            appendLog("Initial Key MD5: " + ck);
+            for (int x = 0; x < MainActivity.CryptoConstants.CHAINED_MAX_DEPTH; x++) {
+                appendLog("\n--- Chain Step " + (x + 1) + " ---");
+                String rn = CryptoUtils.generateChainedPropertiesFilename(ck);
+                appendLog("  -> Look file: " + rn + " (key MD5: " + ck + ")");
+                ZipEntry en = findApkEntryByName(zf, ch, rn, true);
+                if (en != null) {
+                    String fN = en.getName();
+                    appendLog("      [+] Found: " + fN + " (Size: " + en.getSize() + ")");
+                    fc++;
+                    byte[] eB = readZipEntryContent(zf, en);
+                    if (eB == null || eB.length == 0) {
+                        m = "      [!] Entry '" + fN + "' empty/unreadable. Stop.";
+                        appendLog(m);
+                        break;
+                    }
+                    byte[] sk = CryptoUtils.getChainedSimpleCryptKeyBytes(ck);
+                    appendLog("      [*] Decrypt " + fN + " key MD5: " + ck);
+                    Log.d(TAG, "Chained Decrypt Key(HEX '" + ck + "'): " + CryptoUtils.bytesToHex(sk));
+                    byte[] dB = CryptoUtils.decryptAesEcbPkcs7(eB, sk);
+                    if (dB != null) {
+                        appendLog("      [*] Decrypted " + dB.length + " bytes. Parsing...");
+                        Map<String, String> cp = PropertiesParser.parseProperties(dB);
+                        if (!cp.isEmpty()) {
+                            appendLog("      [*] Parsed " + cp.size() + " props.");
+                            p.putAll(cp);
+                        } else appendLog("      [*] Parsed 0 props.");
+                    } else {
+                        m = "      [!] Decrypt fail (Key MD5: " + ck + "). Stop.";
+                        appendLog(m);
+                        break;
+                    }
+                    ck = rn;
+                    appendLog("      [*] Next key MD5 source: " + ck);
+                } else {
+                    if (x == 0) m = "      [-] Initial file (" + rn + ") not found.";
+                    else m = "      [-] File " + rn + " not found. End chain.";
+                    appendLog(m);
+                    break;
+                }
+            }
+            if (p.isEmpty()) {
+                if (m == null) m = "No props decrypted.";
+                if (fc == 0 && !m.contains("Initial file")) m += " (No files found).";
+                appendLog("❌ " + m);
+                handleDecryptionResultString(null, MainActivity.DataMode.CHAINED_PROPERTIES, pn, "err_no_props.props");
+                return;
+            } else if (m != null && !m.contains("End chain")) appendLog("⚠️ Chain stopped: " + m);
+            appendLog("\n[*] Formatting " + p.size() + " props from " + fc + " file(s)...");
+            String fp = PropertiesParser.formatProperties(p);
+            handleDecryptionResultString(fp, MainActivity.DataMode.CHAINED_PROPERTIES, pn, "strings_dec.properties");
+        } catch (Exception e) {
+            m = (m != null ? m + " | " : "") + "Ex chained decrypt: " + e.getMessage();
+            Log.e(TAG, m, e);
+            appendLog("❌ " + m);
+            handleDecryptionResultString(null, MainActivity.DataMode.CHAINED_PROPERTIES, pn, "err_unknown.props");
+        }
+    }
     private void decryptAppDataBytes(byte[]eB,String pN,String iN){appendLog("Decrypt App Data bytes (Size: "+(eB!=null?eB.length:"null")+")");if(eB==null||eB.length==0){appendLog("Input AppData empty/null.");handleDecryptionResult(null,MainActivity.DataMode.APP_DATA,iN);return;}byte[]dB=null;String mt="None";appendLog("[*] Try standard App Data decrypt (XOR)...");try{byte[]xK=CryptoUtils.getAppDataXorKey(pN);appendLog("   XOR Key (pkg '"+pN+"') (Hex: "+CryptoUtils.bytesToHex(xK)+")");byte[]xR=CryptoUtils.performXor(eB,xK);if(isValidZipData(xR)){appendLog("✅ Standard XOR OK. Output valid ZIP.");dB=xR;mt="XOR (Standard)";}else appendLog("[-] Standard XOR -> invalid ZIP.");}catch(Exception e){appendLog("❌ Err XOR decrypt App Data: "+e.getMessage());Log.e(TAG,"AppData XOR Err",e);}if(dB==null){appendLog("\n[*] XOR fail/non-ZIP. Try legacy App Data decrypt (AES PKCS7)...");try{byte[]aK=CryptoUtils.getAppDataAesLegacyKey(pN);appendLog("   Legacy AES Key (Hex): "+CryptoUtils.bytesToHex(aK));if(eB.length%MainActivity.CryptoConstants.AES_BLOCK_SIZE!=0)appendLog("   ⚠️ Warn: Encrypt size legacy AES NOT multiple block. PKCS7 expect.");byte[]aR=CryptoUtils.decryptAesEcbPkcs7(eB,aK);if(aR!=null){if(isValidZipData(aR)){appendLog("✅ Legacy AES OK. Output valid ZIP.");dB=aR;mt="AES (Legacy)";}else appendLog("[-] Legacy AES -> invalid ZIP (decrypt OK).");}else appendLog("❌ Legacy AES decrypt failed (null). Key wrong/data corrupt.");}catch(Exception e){appendLog("❌ Err legacy AES decrypt App Data: "+e.getMessage());Log.e(TAG,"AppData AES Err",e);}}if(dB!=null){handleDecryptionResult(dB,MainActivity.DataMode.APP_DATA,iN);appendLog("\n--- App Data Decrypt Finished (Method: "+mt+") ---");}else{appendLog("\n❌ App Data Decrypt Failed (XOR & legacy AES).");mainThreadHandler.post(()->currentSavableContent=null);updateUiState();}}
     private void handleDecryptionResult(byte[]b,MainActivity.DataMode m,String f){final String p=extractedPackageName;if(b!=null){appendLog("✅ Decrypt OK ("+b.length+" bytes). Save ready.");final byte[]r=b;mainThreadHandler.post(()->currentSavableContent=new SavableContent(r,m,MainActivity.OperationMode.DECRYPT,p,f));}else{appendLog("❌ Decrypt FAILED. No data.");mainThreadHandler.post(()->currentSavableContent=null);}mainThreadHandler.post(this::updateUiState);}
     private void handleDecryptionResultString(String s,MainActivity.DataMode m,String pC,String f){final String fp=(pC!=null)?pC:extractedPackageName;if(s!=null){appendLog("✅ Decrypt OK (String len "+s.length()+"). Save ready.");final String r=s;mainThreadHandler.post(()->currentSavableContent=new SavableContent(r,m,MainActivity.OperationMode.DECRYPT,fp,f));}else{appendLog("❌ Decrypt FAILED. No data.");mainThreadHandler.post(()->currentSavableContent=null);}mainThreadHandler.post(this::updateUiState);}
