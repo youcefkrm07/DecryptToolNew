@@ -429,6 +429,7 @@ public class MainActivity extends AppCompatActivity {
                     case 2: currentDataMode = DataMode.CLONE_SETTINGS; break;
                     case 3: currentDataMode = DataMode.APP_DATA; break;
                     case 4: currentDataMode = DataMode.LEGACY_STRINGS_PROPERTIES; break;
+                    case 5: currentDataMode = DataMode.LEGACY_CLONE_SETTINGS; break;
                     default: 
                         appendLog("Unknown tab position: " + tab.getPosition());
                         currentDataMode = DataMode.TIMESTAMP_DAT;
@@ -493,6 +494,7 @@ public class MainActivity extends AppCompatActivity {
                         case CLONE_SETTINGS:decryptCloneSettingsFromApk(ap,pn);break;
                         case APP_DATA:decryptAppDataFromApk(ap,pn);break;
                         case LEGACY_STRINGS_PROPERTIES:decryptLegacyStringsPropertiesFromApk(ap,pn);break;
+                        case LEGACY_CLONE_SETTINGS:decryptLegacyCloneSettingsFromApk(ap,pn);break;
                         default:throw new IllegalArgumentException("Unsupp decrypt mode: "+dm);
                     }
                 } else { // ENCRYPT
@@ -752,6 +754,10 @@ public class MainActivity extends AppCompatActivity {
             appendLog("⚠️ Legacy properties encryption not recommended.");
             appendLog("   This mode is for decryption only (old AppCloner versions).");
             handleEncryptionResult(null,d,"legacy_not_supported.txt");
+            break;
+        case LEGACY_CLONE_SETTINGS:
+            appendLog("⚠️ Legacy settings encryption not supported.");
+            handleEncryptionResult(null,d,"legacy_settings_not_supported.txt");
             break;
         default:appendLog("❌ Invalid encrypt mode: "+d);mainThreadHandler.post(()->currentSavableContent=null);updateUiState();break;
     }}
