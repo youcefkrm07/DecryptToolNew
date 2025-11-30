@@ -1011,8 +1011,87 @@ public class MainActivity extends AppCompatActivity {
     extractedPackageName=null;extractedTimestamp=null;currentSavableContent=null;if(cA){selectedInputFileUri=null;selectedEncryptOutputDirUri=null;if(tvSelectedInputFilePath!=null)tvSelectedInputFilePath.setText("Input: (None)");if(tvSelectedEncryptOutputDirPath!=null)tvSelectedEncryptOutputDirPath.setText("OutDir: (None)");}updateUiState();}
     private String getFileNameFromUri(Uri u){if(u==null)return"Unknown_File";String r=null;try{DocumentFile d=DocumentFile.fromSingleUri(this,u);if(d!=null&&d.getName()!=null)return d.getName();}catch(Exception e){Log.w(TAG,"DocFile name fail: "+e.getMessage());}if(ContentResolver.SCHEME_CONTENT.equals(u.getScheme())){android.database.Cursor c=null;try{c=getContentResolver().query(u,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null);if(c!=null&&c.moveToFirst()){int n=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);if(n!=-1)r=c.getString(n);}}catch(Exception e){Log.w(TAG,"ContentResolver query name fail: "+e.getMessage());}finally{if(c!=null)c.close();}}if(r==null){r=u.getPath();if(r!=null){int ct=r.lastIndexOf('/');if(ct!=-1)r=r.substring(ct+1);}}if(r!=null&&r.contains("%"))try{r=Uri.decode(r);}catch(Exception ig){}return(r!=null&&!r.isEmpty())?r:u.getLastPathSegment()!=null?u.getLastPathSegment():"Unnamed_File";}
     private String getDirNameFromTreeUri(Uri tU){if(tU==null)return"Unknown_Dir";try{DocumentFile d=DocumentFile.fromTreeUri(this,tU);if(d!=null&&d.getName()!=null)return d.getName();String dI=DocumentsContract.getTreeDocumentId(tU);if(dI!=null){int c=dI.lastIndexOf(':');if(c!=-1&&c<dI.length()-1)return Uri.decode(dI.substring(c+1));else if(!dI.isEmpty())return Uri.decode(dI);}String lS=tU.getLastPathSegment();if(lS!=null){int c=lS.lastIndexOf(':');if(c!=-1&&c<lS.length()-1)return Uri.decode(lS.substring(c+1));return Uri.decode(lS);}}catch(Exception e){Log.e(TAG,"Err getDirName TreeUri",e);}return tU.getLastPathSegment()!=null?Uri.decode(tU.getLastPathSegment()):"Unnamed_Dir";}
-    private String generateSuggestedFilename(SavableContent c){SimpleDateFormat s=new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US);String ts=s.format(new Date());String b="file";String o=(c.operationPerformed==MainActivity.OperationMode.DECRYPT)?"_dec":"_enc";String x=".bin";if(c.inputFilename!=null&&!c.inputFilename.isEmpty()&&!c.inputFilename.startsWith("err_")){int l=c.inputFilename.lastIndexOf('.');if(l>0)b=c.inputFilename.substring(0,l);else b=c.inputFilename;}else{b=c.targetMode.name().toLowerCase(Locale.US);if(c.packageName!=null&&!c.packageName.isEmpty()){String sp=c.packageName.substring(c.packageName.lastIndexOf('.')+1);b+="_"+sp;}}switch(c.targetMode){case TIMESTAMP_DAT:x=(c.operationPerformed==MainActivity.OperationMode.DECRYPT)?".dex":".dat";break;case CHAINED_PROPERTIES:if(c.operationPerformed==MainActivity.OperationMode.DECRYPT){b="strings_"+(c.packageName!=null?c.packageName.replace('.','_'):"unk");x=".properties";}else{b="chained_sum";x=".txt";}break;case CLONE_SETTINGS:b="cloneSettings_"+(c.packageName!=null?c.packageName.replace('.','_'):"unk");x=".json";break;case APP_DATA:b=(c.packageName!=null?c.packageName.replace('.','_'):"app")+"_data";x=(c.operationPerformed==MainActivity.OperationMode.DECRYPT)?".zip":".app_data";break;case LEGACY_STRINGS_PROPERTIES:b="strings_legacy";x=".properties";break;}}b=b.replaceAll("[^a-zA-Z0-9._-]","_");if(b.length()>50)b=b.substring(0,50);return b+o+"_"+ts+x;}
-    private boolean isValidZipData(byte[]d){if(d==null||d.length<4)return false;if(!(d[0]==0x50&&d[1]==0x4B&&d[2]==0x03&&d[3]==0x04))return false;ZipInputStream z=null;try{z=new ZipInputStream(new ByteArrayInputStream(d));return z.getNextEntry()!=null;}catch(Exception e){Log.d(TAG,"isValidZip check fail entry: "+e.getMessage());return false;}finally{if(z!=null)try{z.close();}catch(IOException ig){}}}
-    private void clearPersistedPermissions(){List<android.content.UriPermission>ps=getContentResolver().getPersistedUriPermissions();if(!ps.isEmpty()){appendLog("Clearing "+ps.size()+" persisted URI perms...");int r=0;for(android.content.UriPermission p:ps){try{getContentResolver().releasePersistableUriPermission(p.getUri(),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);r++;}catch(SecurityException e){appendLog("⚠️ Failed release perm URI: "+getFileNameFromUri(p.getUri())+" - "+e.getMessage());}}if(r>0)appendLog("Released "+r+" persisted URI perms.");}}
+    private String generateSuggestedFilename(SavableContent c) {
+        SimpleDateFormat s = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US);
+        String ts = s.format(new Date());
+        String b = "file";
+        String o = (c.operationPerformed == MainActivity.OperationMode.DECRYPT) ? "_dec" : "_enc";
+        String x = ".bin";
+        if (c.inputFilename != null && !c.inputFilename.isEmpty() && !c.inputFilename.startsWith("err_")) {
+            int l = c.inputFilename.lastIndexOf('.');
+            if (l > 0) b = c.inputFilename.substring(0, l);
+            else b = c.inputFilename;
+        } else {
+            b = c.targetMode.name().toLowerCase(Locale.US);
+            if (c.packageName != null && !c.packageName.isEmpty()) {
+                String sp = c.packageName.substring(c.packageName.lastIndexOf('.') + 1);
+                b += "_" + sp;
+            }
+        }
+        switch (c.targetMode) {
+            case TIMESTAMP_DAT:
+                x = (c.operationPerformed == MainActivity.OperationMode.DECRYPT) ? ".dex" : ".dat";
+                break;
+            case CHAINED_PROPERTIES:
+                if (c.operationPerformed == MainActivity.OperationMode.DECRYPT) {
+                    b = "strings_" + (c.packageName != null ? c.packageName.replace('.', '_') : "unk");
+                    x = ".properties";
+                } else {
+                    b = "chained_sum";
+                    x = ".txt";
+                }
+                break;
+            case CLONE_SETTINGS:
+                b = "cloneSettings_" + (c.packageName != null ? c.packageName.replace('.', '_') : "unk");
+                x = ".json";
+                break;
+            case APP_DATA:
+                b = (c.packageName != null ? c.packageName.replace('.', '_') : "app") + "_data";
+                x = (c.operationPerformed == MainActivity.OperationMode.DECRYPT) ? ".zip" : ".app_data";
+                break;
+            case LEGACY_STRINGS_PROPERTIES:
+                b = "strings_legacy";
+                x = ".properties";
+                break;
+        }
+        b = b.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (b.length() > 50) b = b.substring(0, 50);
+        return b + o + "_" + ts + x;
+    }
+
+    private boolean isValidZipData(byte[] d) {
+        if (d == null || d.length < 4) return false;
+        if (!(d[0] == 0x50 && d[1] == 0x4B && d[2] == 0x03 && d[3] == 0x04)) return false;
+        ZipInputStream z = null;
+        try {
+            z = new ZipInputStream(new ByteArrayInputStream(d));
+            return z.getNextEntry() != null;
+        } catch (Exception e) {
+            Log.d(TAG, "isValidZip check fail entry: " + e.getMessage());
+            return false;
+        } finally {
+            if (z != null) try {
+                z.close();
+            } catch (IOException ig) {
+            }
+        }
+    }
+
+    private void clearPersistedPermissions() {
+        List<android.content.UriPermission> ps = getContentResolver().getPersistedUriPermissions();
+        if (!ps.isEmpty()) {
+            appendLog("Clearing " + ps.size() + " persisted URI perms...");
+            int r = 0;
+            for (android.content.UriPermission p : ps) {
+                try {
+                    getContentResolver().releasePersistableUriPermission(p.getUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    r++;
+                } catch (SecurityException e) {
+                    appendLog("⚠️ Failed release perm URI: " + getFileNameFromUri(p.getUri()) + " - " + e.getMessage());
+                }
+            }
+            if (r > 0) appendLog("Released " + r + " persisted URI perms.");
+        }
+    }
 
 }
