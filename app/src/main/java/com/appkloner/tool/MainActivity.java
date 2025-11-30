@@ -606,8 +606,9 @@ public class MainActivity extends AppCompatActivity {
      */
     private void decryptLegacyStringsPropertiesFromApk(String ap, String pn) {
         String entryName = "assets/strings.properties";
+        String altEntryName = "com/applisto/appcloner/classes/strings.properties";
         String inputFilename = "strings.properties";
-        appendLog("Decrypting '" + entryName + "' from APK (Legacy Single Properties)...");
+        appendLog("Decrypting legacy strings.properties from APK...");
         appendLog("Using legacy decryption method for old AppCloner versions.");
         
         if (ap == null) {
@@ -618,7 +619,15 @@ public class MainActivity extends AppCompatActivity {
         
         byte[] encryptedBytes = findAndReadApkEntry(ap, entryName);
         if (encryptedBytes == null) {
-            appendLog(" -> Entry '" + entryName + "' not found/unreadable.");
+            appendLog(" -> Entry '" + entryName + "' not found. Trying alternative path...");
+            encryptedBytes = findAndReadApkEntry(ap, altEntryName);
+            if (encryptedBytes != null) {
+                entryName = altEntryName;
+            }
+        }
+
+        if (encryptedBytes == null) {
+            appendLog(" -> Entry '" + entryName + "' (and alternative) not found/unreadable.");
             handleDecryptionResult(null, MainActivity.DataMode.LEGACY_STRINGS_PROPERTIES, inputFilename);
             return;
         }
@@ -629,7 +638,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         
-        appendLog("[*] Found strings.properties (" + encryptedBytes.length + " bytes).");
+        appendLog("[*] Found " + entryName + " (" + encryptedBytes.length + " bytes).");
         appendLog("[*] Decrypting with legacy hardcoded key (AES-ECB/PKCS5)...");
         
         // Use the new LegacyDecryptor class
