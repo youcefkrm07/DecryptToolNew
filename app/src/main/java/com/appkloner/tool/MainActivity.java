@@ -150,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
     // ========================================================================
     // INNER CLASSES (DataMode, OperationMode, SavableContent, CryptoConstants, CryptoUtils, PropertiesParser)
     // ========================================================================
-     public enum DataMode { TIMESTAMP_DAT, CHAINED_PROPERTIES, CLONE_SETTINGS, APP_DATA }
+     public enum DataMode { TIMESTAMP_DAT, CHAINED_PROPERTIES, CLONE_SETTINGS, APP_DATA, LEGACY_STRINGS_PROPERTIES }
      public enum OperationMode { DECRYPT, ENCRYPT }
     public static class SavableContent { public final Object data; public final MainActivity.DataMode targetMode; public final MainActivity.OperationMode operationPerformed; public final String packageName; public final String inputFilename; public SavableContent(Object data, MainActivity.DataMode targetMode, MainActivity.OperationMode operationPerformed, String packageName, String inputFilename) { if (data == null && !((targetMode == MainActivity.DataMode.CHAINED_PROPERTIES || targetMode == MainActivity.DataMode.CLONE_SETTINGS) && operationPerformed == MainActivity.OperationMode.ENCRYPT)) ; if (!(data instanceof String || data instanceof byte[] || data == null)) throw new IllegalArgumentException("Unsupported data type for SavableContent: " + data.getClass().getName()); this.data = data; this.targetMode = targetMode; this.operationPerformed = operationPerformed; this.packageName = packageName; this.inputFilename = inputFilename; } }
     public static final class CryptoConstants {
@@ -934,7 +934,7 @@ public class MainActivity extends AppCompatActivity {
                 case CHAINED_PROPERTIES:p="Select Plain .properties";break;
                 case CLONE_SETTINGS:p="Select Plain .json";break;
                 case APP_DATA:p="Select Plain .zip";break;
-                case SINGLE_PROPERTIES:p="Select Plain .properties";break;
+                case LEGACY_STRINGS_PROPERTIES:p="Select Plain .properties";break;
             }
             btnSelectInputFile.setText(p);
             tvSelectedInputFilePath.setText(selectedInputFileUri!=null?"Input: "+getFileNameFromUri(selectedInputFileUri):"Input: (None)");
