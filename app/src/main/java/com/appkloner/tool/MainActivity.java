@@ -150,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
     // ========================================================================
     // INNER CLASSES (DataMode, OperationMode, SavableContent, CryptoConstants, CryptoUtils, PropertiesParser)
     // ========================================================================
-     public enum DataMode { TIMESTAMP_DAT, CHAINED_PROPERTIES, CLONE_SETTINGS, APP_DATA, LEGACY_STRINGS_PROPERTIES, LEGACY_CLONE_SETTINGS }
+     public enum DataMode { TIMESTAMP_DAT, CHAINED_PROPERTIES, CLONE_SETTINGS, APP_DATA, LEGACY_STRINGS_PROPERTIES }
      public enum OperationMode { DECRYPT, ENCRYPT }
     public static class SavableContent { public final Object data; public final MainActivity.DataMode targetMode; public final MainActivity.OperationMode operationPerformed; public final String packageName; public final String inputFilename; public SavableContent(Object data, MainActivity.DataMode targetMode, MainActivity.OperationMode operationPerformed, String packageName, String inputFilename) { if (data == null && !((targetMode == MainActivity.DataMode.CHAINED_PROPERTIES || targetMode == MainActivity.DataMode.CLONE_SETTINGS) && operationPerformed == MainActivity.OperationMode.ENCRYPT)) ; if (!(data instanceof String || data instanceof byte[] || data == null)) throw new IllegalArgumentException("Unsupported data type for SavableContent: " + data.getClass().getName()); this.data = data; this.targetMode = targetMode; this.operationPerformed = operationPerformed; this.packageName = packageName; this.inputFilename = inputFilename; } }
     public static final class CryptoConstants {
@@ -608,8 +608,9 @@ public class MainActivity extends AppCompatActivity {
      */
     private void decryptLegacyStringsPropertiesFromApk(String ap, String pn) {
         String entryName = "assets/strings.properties";
+        String altEntryName = "com/applisto/appcloner/classes/strings.properties";
         String inputFilename = "strings.properties";
-        appendLog("Decrypting '" + entryName + "' from APK (Legacy Single Properties)...");
+        appendLog("Decrypting legacy strings.properties from APK...");
         appendLog("Using legacy decryption method for old AppCloner versions.");
         
         if (ap == null) {
@@ -620,7 +621,15 @@ public class MainActivity extends AppCompatActivity {
         
         byte[] encryptedBytes = findAndReadApkEntry(ap, entryName);
         if (encryptedBytes == null) {
-            appendLog(" -> Entry '" + entryName + "' not found/unreadable.");
+            appendLog(" -> Entry '" + entryName + "' not found. Trying alternative path...");
+            encryptedBytes = findAndReadApkEntry(ap, altEntryName);
+            if (encryptedBytes != null) {
+                entryName = altEntryName;
+            }
+        }
+
+        if (encryptedBytes == null) {
+            appendLog(" -> Entry '" + entryName + "' (and alternative) not found/unreadable.");
             handleDecryptionResult(null, MainActivity.DataMode.LEGACY_STRINGS_PROPERTIES, inputFilename);
             return;
         }
@@ -631,7 +640,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         
-        appendLog("[*] Found strings.properties (" + encryptedBytes.length + " bytes).");
+        appendLog("[*] Found " + entryName + " (" + encryptedBytes.length + " bytes).");
         appendLog("[*] Decrypting with legacy hardcoded key (AES-ECB/PKCS5)...");
         
         // Use the new LegacyDecryptor class
@@ -655,53 +664,6 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void decryptCloneSettingsFromApk(String ap,String pn){appendLog("Starting Clone Settings Decrypt. Pkg: "+pn);if(pn==null||pn.isEmpty()){appendLog("❌ Err: Pkg name missing.");handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_no_pkg.json");return;}if(ap==null){appendLog("❌ Err: APK Path NULL.");handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_no_apk.json");return;}StringBuilder sb=new StringBuilder();int x=0,fc=0;String em=null;Map<String,ZipEntry>ch=new HashMap<>();try(ZipFile zf=new ZipFile(ap)){appendLog("Searching MD5 resources (idx 0,1...):");while(true){String fm=CryptoUtils.generateSettingsFilename(pn,x);appendLog("  -> Look part "+x+": "+fm);ZipEntry en=findApkEntryByName(zf,ch,fm,true);if(en!=null){String fN=en.getName();appendLog("      [+] Found: "+fN+" (Size: "+en.getSize()+")");byte[]cb=readZipEntryContent(zf,en);if(cb!=null){String c=new String(cb,StandardCharsets.UTF_8).trim();if(!c.isEmpty()){sb.append(c);fc++;}else appendLog("      [!] Part "+x+" empty.");}else{appendLog("      [!] Err reading "+fN+". Stopping.");em="Err reading: "+fN;break;}}else{if(x==0){appendLog("      [-] Part 0 ("+fm+") not found. Cannot proceed.");em="Initial part (idx 0, "+fm+") not found.";}else appendLog("      [-] Part "+x+" ("+fm+") not found. End sequence.");break;}x++;if(x>100){appendLog("      [!] Max part (100) reached.");em="Max parts limit.";break;}}if(fc==0){String fe=(em!=null)?em:"No valid settings parts.";appendLog("❌ "+fe);handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_no_parts.json");return;}appendLog("[*] Assembled "+fc+" part(s). Base64 len: "+sb.length());appendLog("[*] Deriving key for: "+pn);byte[]dk=CryptoUtils.deriveDynamicSettingsKey(pn);appendLog("[*] Derived key (Hex): "+CryptoUtils.bytesToHex(dk));appendLog("[*] Decoding B64 & AES decrypt (PKCS7)...");String dj=CryptoUtils.decryptAesEcbPkcs7Base64(sb.toString(),dk);handleDecryptionResultString(dj,MainActivity.DataMode.CLONE_SETTINGS,pn,"cloneSettings_dec.json");if(dj!=null){String tj=dj.trim();if((tj.startsWith("{")&&tj.endsWith("}"))||(tj.startsWith("[")&&tj.endsWith("]")))appendLog("   Result JSON like.");else appendLog("   ⚠️ Warn: Result NOT JSON like.");}}catch(Exception e){em=(em!=null?em+" | ":"")+"Ex settings decrypt: "+e.getMessage();Log.e(TAG,em,e);appendLog("❌ "+em);handleDecryptionResultString(null,MainActivity.DataMode.CLONE_SETTINGS,pn,"err_unknown.json");}}
-
-    private void decryptLegacyCloneSettingsFromApk(String ap, String pn) {
-        appendLog("Starting Legacy Clone Settings Decrypt. Pkg: " + pn);
-        if (pn == null || pn.isEmpty()) {
-            appendLog("❌ Err: Pkg name missing.");
-            handleDecryptionResultString(null, MainActivity.DataMode.LEGACY_CLONE_SETTINGS, pn, "err_no_pkg.json");
-            return;
-        }
-        if (ap == null) {
-            appendLog("❌ Err: APK Path NULL.");
-            handleDecryptionResultString(null, MainActivity.DataMode.LEGACY_CLONE_SETTINGS, pn, "err_no_apk.json");
-            return;
-        }
-        String entryPath = "com/applisto/appcloner/classes/cloneSettings.json";
-        String em = null;
-        try (ZipFile zf = new ZipFile(ap)) {
-            ZipEntry en = zf.getEntry(entryPath);
-            if (en != null) {
-                appendLog("[+] Found legacy file: " + entryPath);
-                byte[] content = readZipEntryContent(zf, en);
-                if (content != null && content.length > 0) {
-                    String b64 = new String(content, StandardCharsets.UTF_8).trim();
-                    appendLog("[*] Content read. Base64 len: " + b64.length());
-
-                    byte[] dk = CryptoUtils.deriveDynamicSettingsKey(pn);
-                    appendLog("[*] Derived key (Hex): " + CryptoUtils.bytesToHex(dk));
-
-                    String decrypted = CryptoUtils.decryptAesEcbPkcs7Base64(b64, dk);
-                    if (decrypted != null) {
-                        handleDecryptionResultString(decrypted, MainActivity.DataMode.LEGACY_CLONE_SETTINGS, pn, "cloneSettings_legacy_dec.json");
-                        return;
-                    } else {
-                        em = "Decryption failed (null result).";
-                    }
-                } else {
-                    em = "File empty/unreadable.";
-                }
-            } else {
-                em = "Legacy file not found: " + entryPath;
-            }
-        } catch (Exception e) {
-            em = "Exception: " + e.getMessage();
-            Log.e(TAG, "Legacy settings decrypt ex", e);
-        }
-        appendLog("❌ " + em);
-        handleDecryptionResultString(null, MainActivity.DataMode.LEGACY_CLONE_SETTINGS, pn, "err_legacy_settings.json");
-    }
     private void decryptChainedPropertiesFromApk(String ap, String pn, Long ts) {
         appendLog("Starting Chained Props Decrypt. Pkg: " + pn + ", TS: " + ts);
         if (pn == null || pn.isEmpty() || ts == null) {
@@ -1063,7 +1025,7 @@ public class MainActivity extends AppCompatActivity {
                 case CHAINED_PROPERTIES:p="Select Plain .properties";break;
                 case CLONE_SETTINGS:p="Select Plain .json";break;
                 case APP_DATA:p="Select Plain .zip";break;
-                case SINGLE_PROPERTIES:p="Select Plain .properties";break;
+                case LEGACY_STRINGS_PROPERTIES:p="Select Plain .properties";break;
             }
             btnSelectInputFile.setText(p);
             tvSelectedInputFilePath.setText(selectedInputFileUri!=null?"Input: "+getFileNameFromUri(selectedInputFileUri):"Input: (None)");
@@ -1181,10 +1143,6 @@ public class MainActivity extends AppCompatActivity {
             case LEGACY_STRINGS_PROPERTIES:
                 b = "strings_legacy";
                 x = ".properties";
-                break;
-            case LEGACY_CLONE_SETTINGS:
-                b = "cloneSettings_legacy_" + (c.packageName != null ? c.packageName.replace('.', '_') : "unk");
-                x = ".json";
                 break;
         }
         b = b.replaceAll("[^a-zA-Z0-9._-]", "_");
